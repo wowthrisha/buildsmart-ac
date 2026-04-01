@@ -25,6 +25,27 @@ def _notify(user_id, title, body):
         send_live_notif(user_id, title, body)
     except: pass
 
+def seed_db(app):
+    from app.models import User
+    from werkzeug.security import generate_password_hash
+    from sqlalchemy.exc import IntegrityError
+    
+    with app.app_context():
+        try:
+            # Architect
+            if not User.query.filter_by(email='arch@qa.com').first():
+                arch = User(name='QA Architect', email='arch@qa.com', role='architect',
+                            password_hash=generate_password_hash('qapass123'))
+                db.session.add(arch)
+            # Client
+            if not User.query.filter_by(email='client@qa.com').first():
+                client = User(name='QA Client', email='client@qa.com', role='client',
+                             password_hash=generate_password_hash('qapass123'))
+                db.session.add(client)
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(Config)
@@ -134,5 +155,6 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        seed_db(app)
 
     return app
