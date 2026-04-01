@@ -114,7 +114,7 @@
     // Compliance checkbox live toggle (P0-1C)
     async function toggleCompliance(projectId, itemId, checkbox) {
         try {
-            const res = await fetch(`/projects/${projectId}/compliance/toggle/${itemId}`, {
+            const res = await fetch(`/projects/${projectId}/compliance/${itemId}/toggle`, {
                 method: 'POST',
                 headers: { 'X-CSRFToken': '{{ csrf_token() }}', 'Content-Type': 'application/json' }
             });

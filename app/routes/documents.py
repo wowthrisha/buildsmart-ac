@@ -1,7 +1,7 @@
 from flask import Blueprint, request, redirect, render_template, abort
 from flask_login import login_required, current_user
 from app import db
-from app.models import Project, Document
+from app.models import Project, Document, DocumentVersion
 from app.auth import require_architect
 from datetime import datetime
 
@@ -37,14 +37,48 @@ def upload(project_id):
                 return redirect(request.referrer or '/dashboard')
             from werkzeug.utils import secure_filename
             from flask import current_app
-            filename = secure_filename(file.filename)
             import os
+            original_name = file.filename
+            filename = secure_filename(original_name)
+            if not filename:
+                from flask import flash
+                flash('Invalid file name.', 'error')
+                return redirect(request.referrer or '/dashboard')
             os.makedirs(current_app.config['UPLOAD_FOLDER'], exist_ok=True)
-            file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], filename))
+            base, ext = os.path.splitext(filename)
+            stored_name = filename
+            counter = 1
+            while os.path.exists(os.path.join(current_app.config['UPLOAD_FOLDER'], stored_name)):
+                stored_name = f'{base}_{counter}{ext}'
+                counter += 1
+            file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], stored_name))
+
+            doc = Document(
+                project_id=p.id,
+                filename=stored_name,
+                original_name=original_name,
+                category=(request.form.get('category') or 'General').strip()[:50],
+                uploader_id=current_user.id,
+                uploader_role=current_user.role,
+                shared_with_client=False
+            )
+            db.session.add(doc)
+            db.session.flush()
+
+            db.session.add(DocumentVersion(
+                document_id=doc.id,
+                filename=stored_name,
+                version_num=1,
+                uploader_id=current_user.id
+            ))
+        else:
+            from flask import flash
+            flash('Choose a file to upload.', 'error')
+            return redirect(request.referrer or '/dashboard')
                 
         db.session.commit()
         from flask import flash
-        flash('Saved.', 'success')
+        flash('Document uploaded.', 'success')
         return redirect(request.referrer or '/dashboard')
     except ValueError as e:
         db.session.rollback()
@@ -67,6 +101,7 @@ def share(doc_id):
         p = d.project
         if current_user.role == 'architect' and p.architect_id != current_user.id: abort(403)
         
+        d.shared_with_client = True
         db.session.commit()
         
         try:
@@ -78,7 +113,7 @@ def share(doc_id):
             current_app.logger.error(f'Notification error: {notify_e}')
 
         from flask import flash
-        flash('Saved.', 'success')
+        flash('Document shared.', 'success')
         return redirect(request.referrer or '/dashboard')
     except ValueError as e:
         db.session.rollback()

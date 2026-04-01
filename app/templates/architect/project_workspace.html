@@ -281,12 +281,13 @@
     .comp-row:hover { border-color:#F5C842; }
     .comp-check-col { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:52px; }
     .comp-check-lbl { font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; }
-    .comp-check { width:24px; height:24px; border-radius:5px; border:2px solid #3A3A3A; background:#0D0D0D; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.2s; flex-shrink:0; }
-    .comp-check.arch-check.checked { background:#F5C842; border-color:#F5C842; }
-    .comp-check.client-check.checked { background:#4ADE80; border-color:#4ADE80; }
+    .comp-check { width:24px; height:24px; border-radius:5px; border:2px solid #3A3A3A; background:#0D0D0D; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.2s; flex-shrink:0; color:transparent; }
+    .comp-check.arch-check.checked { background:#F5C842; border-color:#F5C842; box-shadow:0 0 0 1px rgba(245,200,66,0.35), 0 0 14px rgba(245,200,66,0.35); color:#111; }
+    .comp-check.client-check.checked { background:#4ADE80; border-color:#4ADE80; box-shadow:0 0 0 1px rgba(74,222,128,0.35), 0 0 14px rgba(74,222,128,0.25); color:#08150C; }
     .comp-check:hover:not([disabled]) { border-color:#F5C842; transform:scale(1.08); }
     .comp-check[disabled] { opacity:0.45; cursor:default; }
-    .comp-check svg { width:14px; height:14px; stroke:#0D0D0D; stroke-width:3; fill:none; }
+    .comp-check.checked[disabled] { opacity:1; }
+    .comp-check svg { width:14px; height:14px; stroke:currentColor; stroke-width:3.2; fill:none; stroke-linecap:round; stroke-linejoin:round; }
     .comp-info { flex:1; min-width:0; }
     .comp-name { font-size:13px; color:#fff; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .comp-desc { font-size:11px; color:#606060; margin-top:2px; }
@@ -359,7 +360,8 @@
         <!-- Architect checkbox -->
         <div class="comp-check-col">
           <span class="comp-check-lbl">Arch</span>
-          <button class="comp-check arch-check {% if arch_done %}checked{% endif %}"
+          <button type="button"
+                  class="comp-check arch-check {% if arch_done %}checked{% endif %}"
                   onclick="toggleCompCheck({{ item.id }}, 'architect', {{ 'true' if arch_done else 'false' }}, '{{ project.id }}', '{{ csrf_token() }}')"
                   title="Architect verification">
             {% if arch_done %}<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>{% endif %}
@@ -369,7 +371,8 @@
         <!-- Client checkbox (disabled for architect) -->
         <div class="comp-check-col">
           <span class="comp-check-lbl">Client</span>
-          <button class="comp-check client-check {% if cli_done %}checked{% endif %}"
+          <button type="button"
+                  class="comp-check client-check {% if cli_done %}checked{% endif %}"
                   disabled title="Client verification">
             {% if cli_done %}<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>{% endif %}
           </button>
@@ -419,16 +422,30 @@
       }).then(() => window.location.reload());
     }
     let _compDebounce = {};
+    function setCompCheckState(btn, checked) {
+      if (!btn) return;
+      btn.classList.toggle('checked', checked);
+      btn.setAttribute('aria-pressed', checked ? 'true' : 'false');
+      btn.innerHTML = checked ? '<svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>' : '';
+    }
+
     function toggleCompCheck(itemId, role, currentlyChecked, projectId, csrf) {
       clearTimeout(_compDebounce[itemId+role]);
       _compDebounce[itemId+role] = setTimeout(() => {
         const btn = document.querySelector(`#comp-row-${itemId} .${role === 'architect' ? 'arch' : 'client'}-check`);
         const newChecked = !currentlyChecked;
-        fetch('/projects/' + projectId + '/compliance/toggle/' + itemId, {
+        setCompCheckState(btn, newChecked);
+        fetch('/projects/' + projectId + '/compliance/' + itemId + '/toggle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
           body: JSON.stringify({ checked_by: role, checked: newChecked })
-        }).then(() => window.location.reload());
+        }).then((response) => {
+          if (!response.ok) {
+            setCompCheckState(btn, currentlyChecked);
+            return;
+          }
+          window.location.reload();
+        }).catch(() => setCompCheckState(btn, currentlyChecked));
       }, 300);
     }
   </script>
