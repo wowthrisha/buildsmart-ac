@@ -1,0 +1,38 @@
+{% extends "base_architect.html" %}
+{% block title %}Activity — BuildSmart{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1 class="page-title">Activity Feed</h1>
+    <p class="page-subtitle">Real-time audit log of all project actions.</p>
+</div>
+
+<div class="card" style="padding:0;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Project</th>
+                <th>Actor</th>
+                <th>Action</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td>{{ log.created_at|timeago }}</td>
+                <td><strong>{{ log.project.name if log.project else '--' }}</strong></td>
+                <td>{{ log.actor.name }}</td>
+                <td><span class="badge badge-sky">{{ log.action }}</span></td>
+                <td>{{ log.description }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" style="text-align:center; padding:40px; color:var(--chalk-3);">No activity recorded.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

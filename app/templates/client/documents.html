@@ -1,0 +1,38 @@
+{% extends "base_client.html" %}
+{% block title %}Documents — BuildSmart{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1 class="page-title">Documents</h1>
+    <p class="page-subtitle">Files shared by your architect.</p>
+</div>
+
+<div class="card" style="padding:0;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Document</th>
+                <th>Category</th>
+                <th>Date</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in documents %}
+            <tr>
+                <td><strong>{{ d.original_name }}</strong></td>
+                <td><span class="badge badge-muted">{{ d.category }}</span></td>
+                <td>{{ d.created_at|strftime('%d %b %Y') }}</td>
+                <td>
+                    <a href="{{ url_for('documents.download', doc_id=d.id) }}" class="btn btn-ghost" style="padding:6px 12px; font-size:12px;">Download</a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" style="text-align:center; padding:40px; color:var(--chalk-3);">No documents have been shared yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

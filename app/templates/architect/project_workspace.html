@@ -1,0 +1,881 @@
+{% extends "base_architect.html" %}
+{% block title %}{{ project.name }} — BuildSmart{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="page-head-row">
+    <div>
+      <div class="page-eyebrow">Project Workspace</div>
+      <h1 class="page-title">{{ project.name }}</h1>
+      <p class="page-subtitle">{{ project.plot_zone }} Project · Stage: <strong>{{ project.status }}</strong></p>
+    </div>
+        <form action="{{ url_for('projects.delete', project_id=project.id) }}" method="POST" onsubmit="return confirm('Delete this project forever?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-ghost" style="color:var(--rose); border-color:rgba(251,113,113,0.2);">Delete</button>
+        </form>
+    </div>
+  </div>
+
+<div class="tab-nav">
+  <button class="tab-btn active" data-tab="overview">Overview</button>
+  <button class="tab-btn" data-tab="plot">Plot Analysis</button>
+  <button class="tab-btn" data-tab="documents">Documents</button>
+  <button class="tab-btn" data-tab="compliance">Compliance</button>
+  <button class="tab-btn" data-tab="meetings">Meetings</button>
+  <button class="tab-btn" data-tab="payments">Payments</button>
+  <button class="tab-btn" data-tab="activity">Activity</button>
+</div>
+
+<!-- Tab: Overview -->
+<div class="tab-panel active" data-panel="overview">
+  <div class="two-col">
+    <div class="card">
+        <div class="section-title">Project Details</div>
+        <div class="field">
+            <label>Client</label>
+            <div style="font-weight:600;">{{ project.client.name if project.client else 'No client assigned' }}</div>
+            <div style="font-size:12px; color:var(--chalk-3);">{{ project.client.email if project.client else '' }}</div>
+        </div>
+        <div class="field">
+            <label>Created</label>
+            <div style="font-weight:600;">{{ project.created_at|strftime('%d %B %Y') }}</div>
+        </div>
+        <div class="field">
+            <label>Last Updated</label>
+            <div style="font-weight:600;">{{ project.updated_at|timeago }}</div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="page-head-row" style="margin-bottom:16px;">
+            <div class="section-title" style="margin:0;">Image Board</div>
+            <form action="{{ url_for('projects.upload_image', project_id=project.id) }}" method="POST" enctype="multipart/form-data" style="display:flex; gap:8px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="file" name="image" id="img-upload" style="display:none;" onchange="this.form.submit()" accept="image/*">
+                <label for="img-upload" class="btn btn-ghost" style="padding:6px 12px; font-size:11px; cursor:pointer;">+ Add Image</label>
+            </form>
+        </div>
+        <p style="color:var(--chalk-3); font-size:11px; margin-bottom:16px;">Visual references and renders.</p>
+        <div class="image-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:12px;">
+            {% for img in project.images.all() %}
+            <div class="image-item" style="position:relative; aspect-ratio:1/1; border-radius:8px; overflow:hidden; border:1px solid var(--line);">
+                <img src="/uploads/{{ img.filename }}" style="width:100%; height:100%; object-fit:cover;">
+                <div style="position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.6); padding:4px; font-size:10px; color:#fff; text-align:center;">
+                    {{ img.tag }}
+                </div>
+            </div>
+            {% else %}
+            <div style="grid-column: 1/-1; text-align:center; padding:40px; border:1px dashed var(--line); border-radius:12px; color:var(--chalk-3); font-size:12px;">
+                No images uploaded yet.
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tab: Plot Analysis -->
+<div class="tab-panel" data-panel="plot">
+  <div class="two-col">
+    <!-- Row 1: Sketch upload -->
+    <div class="card">
+        <div class="section-title">Plot Sketch</div>
+        {% if project.plot and project.plot.sketch_filename %}
+        <div style="margin-bottom:16px; padding:12px; background:var(--ink-2); border-radius:8px; display:flex; align-items:center; gap:12px;">
+            <svg viewBox="0 0 24 24" style="width:24px; height:24px; stroke:var(--gold); stroke-width:2; fill:none;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <div style="flex:1; font-size:13px;">{{ project.plot.sketch_filename }}</div>
+            <span class="badge badge-muted">Uploaded by {{ project.plot.sketch_uploader }}</span>
+        </div>
+        {% endif %}
+        
+        <form action="{{ url_for('plot.upload', project_id=project.id) }}" method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="field">
+                <label>Upload new sketch (JPG, PNG, PDF)</label>
+                <input type="file" name="sketch" required>
+            </div>
+            <button type="submit" class="btn btn-ghost" style="width:100%;">Upload Sketch</button>
+        </form>
+    </div>
+
+    <!-- Row 2: Manual Entry Form -->
+    <div class="card">
+        <div class="section-title">Compliance Dimensions</div>
+        <form action="{{ url_for('plot.update', project_id=project.id) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% set plot = project.plot %}
+            {% set flags = plot.compliance_json|fromjson if plot and plot.compliance_json else {} %}
+            
+            <div class="three-col" style="grid-template-columns: 1fr 1fr 1fr;">
+                <div class="field">
+                    <label>Area (sq ft)</label>
+                    <input type="number" step="0.01" name="area" value="{{ plot.area if plot else '' }}">
+                    {% if flags.area %}<span class="badge badge-{{ 'teal' if flags.area == 'pass' else 'gold' if flags.area == 'warn' else 'rose' }}">{{ flags.area }}</span>{% endif %}
+                </div>
+                <div class="field">
+                    <label>Frontage (ft)</label>
+                    <input type="number" step="0.01" name="frontage" value="{{ plot.frontage if plot else '' }}">
+                    {% if flags.frontage %}<span class="badge badge-{{ 'teal' if flags.frontage == 'pass' else 'gold' if flags.frontage == 'warn' else 'rose' }}">{{ flags.frontage }}</span>{% endif %}
+                </div>
+                <div class="field">
+                    <label>Depth (ft)</label>
+                    <input type="number" step="0.01" name="depth" value="{{ plot.depth if plot else '' }}">
+                    {% if flags.depth %}<span class="badge badge-{{ 'teal' if flags.depth == 'pass' else 'gold' if flags.depth == 'warn' else 'rose' }}">{{ flags.depth }}</span>{% endif %}
+                </div>
+            </div>
+
+            <div class="three-col" style="grid-template-columns: 1fr 1fr 1fr;">
+                <div class="field">
+                    <label>Front Setback (ft)</label>
+                    <input type="number" step="0.01" name="front_setback" value="{{ plot.front_setback if plot else '' }}">
+                </div>
+                <div class="field">
+                    <label>Rear Setback (ft)</label>
+                    <input type="number" step="0.01" name="rear_setback" value="{{ plot.rear_setback if plot else '' }}">
+                </div>
+                <div class="field">
+                    <label>Side Setback (ft)</label>
+                    <input type="number" step="0.01" name="side_setback" value="{{ plot.side_setback if plot else '' }}">
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="field">
+                    <label>Road Width (ft)</label>
+                    <input type="number" step="0.01" name="road_width" value="{{ plot.road_width if plot else '' }}">
+                </div>
+                <div class="field">
+                    <label>Height (m)</label>
+                    <input type="number" step="0.01" name="height" value="{{ plot.height if plot else '' }}">
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width:100%; margin-top:12px;">Save & Check Compliance</button>
+        </form>
+
+        {% if plot and plot.compliance_json %}
+        <div style="margin-top:24px; padding-top:16px; border-top:1px solid var(--line);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <span class="badge badge-sky">Track {{ plot.track }} detected</span>
+                {% if not plot.confirmed %}
+                <form action="{{ url_for('plot.confirm', project_id=project.id) }}" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-primary" style="background:var(--gold-grad); color:#000;">Confirm & Show Client</button>
+                </form>
+                {% else %}
+                <span class="badge badge-teal">✅ Confirmed on {{ plot.confirmed_at|strftime('%d %b') }}</span>
+                {% endif %}
+            </div>
+            {% if plot.fuzzy_score is not none %}
+            <div style="margin-top:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <span style="font-size:11px; color:var(--chalk-3); text-transform:uppercase; letter-spacing:0.06em;">Compliance Confidence</span>
+                    <span style="font-size:14px; font-weight:700; color:{% if plot.fuzzy_score >= 80 %}#4ADE80{% elif plot.fuzzy_score >= 50 %}#F5C842{% else %}#E05252{% endif %};">
+                        {{ '%.1f'|format(plot.fuzzy_score) }}%
+                    </span>
+                </div>
+                <div style="background:var(--ink-2); border-radius:6px; height:10px; overflow:hidden;">
+                    <div style="height:100%; width:{{ plot.fuzzy_score }}%; border-radius:6px; transition:width 0.6s ease;
+                        background:{% if plot.fuzzy_score >= 80 %}#4ADE80{% elif plot.fuzzy_score >= 50 %}#F5C842{% else %}#E05252{% endif %};"></div>
+                </div>
+                <div style="font-size:11px; color:var(--chalk-3); margin-top:4px;">
+                    {% if plot.fuzzy_score >= 80 %}✅ Good — ready for submission
+                    {% elif plot.fuzzy_score >= 50 %}⚠️ Partial compliance — review flagged items
+                    {% else %}❌ Poor compliance — redesign required{% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Tab: Documents -->
+<div class="tab-panel" data-panel="documents">
+    <div class="card">
+        <div class="page-head-row" style="margin-bottom:24px;">
+            <div class="section-title" style="margin:0;">Document Vault</div>
+            <form action="{{ url_for('documents.upload', project_id=project.id) }}" method="POST" enctype="multipart/form-data" style="display:flex; gap:8px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <select name="category" class="btn btn-ghost" style="appearance:auto; padding-right:30px;">
+                    <option value="Site Plan">Site Plan</option>
+                    <option value="Structural">Structural</option>
+                    <option value="Legal">Legal</option>
+                    <option value="Client Docs">Client Docs</option>
+                </select>
+                <input type="file" name="doc" id="doc-upload" style="display:none;" onchange="this.form.submit()">
+                <label for="doc-upload" class="btn btn-primary" style="cursor:pointer;">
+                    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Upload
+                </label>
+            </form>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Category</th>
+                    <th>Version</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in project.documents.all() %}
+                <tr>
+                    <td>
+                        <div style="font-weight:600;">{{ d.original_name }}</div>
+                        <div style="font-size:11px; color:var(--chalk-3);">Uploaded {{ d.created_at|strftime('%d %b %Y') }} by {{ d.uploader_role }}</div>
+                    </td>
+                    <td><span class="badge badge-muted">{{ d.category }}</span></td>
+                    <td>{{ d.version_label }}</td>
+                    <td>
+                        {% if d.shared_with_client %}
+                        <span class="badge badge-teal">Shared</span>
+                        {% else %}
+                        <span class="badge badge-gold">Internal</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display:flex; gap:12px; align-items:center;">
+                            <a href="{{ url_for('documents.download', doc_id=d.id) }}" title="Download">
+                                <svg viewBox="0 0 24 24" style="width:18px; height:18px; stroke:var(--gold); stroke-width:2; fill:none;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            </a>
+                            {% if not d.shared_with_client %}
+                            <form action="{{ url_for('documents.share', doc_id=d.id) }}" method="POST">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-ghost" style="padding:4px 8px; font-size:11px;">Share</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" style="text-align:center; padding:40px; color:var(--chalk-3);">No documents uploaded yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Tab: Compliance -->
+<!-- BACKEND NOTE: ComplianceItem model needs: arch_checked (bool), client_checked (bool),
+     arch_checked_at (datetime), client_checked_at (datetime), is_custom (bool).
+     New endpoint needed: POST /projects/<id>/compliance/<item_id>/toggle
+     Body: { checked_by: 'architect'|'client', checked: true|false }
+     New endpoint: POST /projects/<id>/compliance/add-custom
+     Body: { label: str, description: str } -->
+<div class="tab-panel" data-panel="compliance">
+  <style>
+    .comp-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; flex-shrink:0; }
+    .comp-title { font-size:18px; color:#fff; font-weight:500; margin:0; }
+    .comp-subtitle { font-size:13px; color:#606060; margin:4px 0 8px; }
+    .comp-progress-pill { display:inline-flex; align-items:center; gap:6px; background:#2A2010; color:#F5C842; font-size:11px; font-weight:500; padding:3px 10px; border-radius:20px; }
+    .comp-body { height:calc(100vh - 260px); overflow-y:auto; padding-right:4px; }
+    .comp-body::-webkit-scrollbar { width:4px; } .comp-body::-webkit-scrollbar-track { background:transparent; } .comp-body::-webkit-scrollbar-thumb { background:#3A3A3A; border-radius:2px; } .comp-body::-webkit-scrollbar-thumb:hover { background:#F5C842; }
+    .comp-row { display:flex; align-items:center; gap:16px; background:#1A1A1A; border:1px solid #2A2A2A; border-radius:8px; padding:14px 20px; margin-bottom:8px; transition:border-color 0.2s ease; cursor:default; }
+    .comp-row:hover { border-color:#F5C842; }
+    .comp-check-col { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:52px; }
+    .comp-check-lbl { font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; }
+    .comp-check { width:24px; height:24px; border-radius:5px; border:2px solid #3A3A3A; background:#0D0D0D; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.2s; flex-shrink:0; }
+    .comp-check.arch-check.checked { background:#F5C842; border-color:#F5C842; }
+    .comp-check.client-check.checked { background:#4ADE80; border-color:#4ADE80; }
+    .comp-check:hover:not([disabled]) { border-color:#F5C842; transform:scale(1.08); }
+    .comp-check[disabled] { opacity:0.45; cursor:default; }
+    .comp-check svg { width:14px; height:14px; stroke:#0D0D0D; stroke-width:3; fill:none; }
+    .comp-info { flex:1; min-width:0; }
+    .comp-name { font-size:13px; color:#fff; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .comp-desc { font-size:11px; color:#606060; margin-top:2px; }
+    .comp-status { flex-shrink:0; }
+    .pill-complete { background:#1A3A2A; color:#4ADE80; font-size:11px; font-weight:500; padding:3px 10px; border-radius:20px; }
+    .pill-inprog { background:#2A2010; color:#F5C842; font-size:11px; font-weight:500; padding:3px 10px; border-radius:20px; }
+    .pill-pending { background:#1E1E1E; color:#606060; font-size:11px; font-weight:500; padding:3px 10px; border-radius:20px; }
+    .pill-custom { background:#2A1A00; color:#F5C842; font-size:10px; font-weight:500; padding:2px 8px; border-radius:20px; margin-left:6px; }
+    .sep-vert { width:1px; background:#2A2A2A; height:36px; flex-shrink:0; }
+    .add-criteria-form { background:#1A1A1A; border:1px solid #2A2A2A; border-radius:8px; padding:14px 20px; margin-bottom:12px; display:none; }
+    .add-criteria-form.open { display:flex; flex-direction:column; gap:10px; }
+  </style>
+
+  <div style="height:100%; display:flex; flex-direction:column;">
+    <div class="comp-header">
+      <div>
+        <p class="comp-title">Compliance Checklist</p>
+        <p class="comp-subtitle">Track mandatory TNPCR submission documents.</p>
+        <span class="comp-progress-pill" id="comp-progress">
+          {% set arch_checked = project.checklist.filter_by(arch_checked=True).count() if project.checklist.filter_by is defined else 0 %}
+          {% set total_items = project.checklist.count() %}
+          {{ arch_checked }} of {{ total_items }} verified
+        </span>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button onclick="toggleAddCriteria()" class="comp-check" style="width:auto; padding:6px 14px; border-radius:6px; font-size:12px; color:#F5C842; border-color:#F5C842; background:transparent;">+ Add Criteria</button>
+        <form action="{{ url_for('projects.toggle_compliance_visibility', project_id=project.id) }}" method="POST">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" style="background:transparent; border:1px solid #F5C842; color:#F5C842; font-size:11px; padding:6px 12px; border-radius:6px; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='#F5C842';this.style.color='#0D0D0D'" onmouseout="this.style.background='transparent';this.style.color='#F5C842'">
+            {{ 'Hide from Client' if project.allow_client_compliance else 'Show to Client' }}
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Add Criteria Form -->
+    <div class="add-criteria-form" id="add-criteria-form">
+      <div style="font-size:13px; color:#A0A0A0; font-weight:500;">New Compliance Criteria</div>
+      <form action="{{ url_for('projects.workspace', project_id=project.id) }}" method="POST" style="display:flex; gap:10px; flex-wrap:wrap;" onsubmit="return false;">
+        <input id="new-crit-label" type="text" placeholder="Document / Criteria name" required style="flex:1; min-width:180px; background:#0D0D0D; border:1px solid #2A2A2A; color:#fff; padding:10px 14px; font-size:13px; border-radius:6px;" onfocus="this.style.borderColor='#F5C842'" onblur="this.style.borderColor='#2A2A2A'">
+        <input id="new-crit-desc" type="text" placeholder="Description (optional)" style="flex:1; min-width:180px; background:#0D0D0D; border:1px solid #2A2A2A; color:#fff; padding:10px 14px; font-size:13px; border-radius:6px;" onfocus="this.style.borderColor='#F5C842'" onblur="this.style.borderColor='#2A2A2A'">
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button onclick="submitAddCriteria('{{ project.id }}', '{{ csrf_token() }}'" style="background:#F5C842; color:#0D0D0D; border:none; padding:10px 20px; border-radius:6px; font-weight:600; cursor:pointer;">Add</button>
+          <button onclick="toggleAddCriteria()" style="background:transparent; border:none; color:#606060; font-size:13px; cursor:pointer;">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Column headers -->
+    <div style="display:flex; gap:16px; padding:0 20px 8px; align-items:center; flex-shrink:0;">
+      <div style="min-width:52px; text-align:center; font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em;">Arch ✓</div>
+      <div class="sep-vert" style="height:16px;"></div>
+      <div style="min-width:52px; text-align:center; font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em;">Client ✓</div>
+      <div style="flex:1; font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em;">Document</div>
+      <div style="min-width:80px; font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; text-align:right;">Status</div>
+    </div>
+
+    <div class="comp-body">
+      {% for item in project.checklist.all() %}
+      {% set arch_done = item.arch_checked if item.arch_checked is defined else item.checked %}
+      {% set cli_done = item.client_checked if item.client_checked is defined else false %}
+      {% if arch_done and cli_done %}
+        {% set row_status = 'complete' %}
+      {% elif arch_done or cli_done %}
+        {% set row_status = 'inprog' %}
+      {% else %}
+        {% set row_status = 'pending' %}
+      {% endif %}
+      <div class="comp-row" id="comp-row-{{ item.id }}">
+        <!-- Architect checkbox -->
+        <div class="comp-check-col">
+          <span class="comp-check-lbl">Arch</span>
+          <button class="comp-check arch-check {% if arch_done %}checked{% endif %}"
+                  onclick="toggleCompCheck({{ item.id }}, 'architect', {{ 'true' if arch_done else 'false' }}, '{{ project.id }}', '{{ csrf_token() }}')"
+                  title="Architect verification">
+            {% if arch_done %}<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>{% endif %}
+          </button>
+        </div>
+        <div class="sep-vert"></div>
+        <!-- Client checkbox (disabled for architect) -->
+        <div class="comp-check-col">
+          <span class="comp-check-lbl">Client</span>
+          <button class="comp-check client-check {% if cli_done %}checked{% endif %}"
+                  disabled title="Client verification">
+            {% if cli_done %}<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>{% endif %}
+          </button>
+        </div>
+        <div class="sep-vert"></div>
+        <!-- Info -->
+        <div class="comp-info">
+          <div class="comp-name">{{ item.label }}
+            {% if item.is_custom is defined and item.is_custom %}
+            <span class="pill-custom">Custom</span>
+            {% endif %}
+          </div>
+          {% if item.description is defined and item.description %}
+          <div class="comp-desc">{{ item.description }}</div>
+          {% endif %}
+        </div>
+        <!-- Status pill -->
+        <div class="comp-status">
+          {% if row_status == 'complete' %}
+          <span class="pill-complete">✓ Complete</span>
+          {% elif row_status == 'inprog' %}
+          <span class="pill-inprog">In Progress</span>
+          {% else %}
+          <span class="pill-pending">Pending</span>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div style="text-align:center; padding:40px; color:#606060; font-size:13px;">No compliance items yet. Add criteria above.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <script>
+    function toggleAddCriteria() {
+      const f = document.getElementById('add-criteria-form');
+      f.classList.toggle('open');
+    }
+    function submitAddCriteria(projectId, csrf) {
+      const label = document.getElementById('new-crit-label').value.trim();
+      const desc = document.getElementById('new-crit-desc').value.trim();
+      if (!label) return;
+      fetch('/projects/' + projectId + '/compliance/add-custom', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+        body: JSON.stringify({ label, description: desc })
+      }).then(() => window.location.reload());
+    }
+    let _compDebounce = {};
+    function toggleCompCheck(itemId, role, currentlyChecked, projectId, csrf) {
+      clearTimeout(_compDebounce[itemId+role]);
+      _compDebounce[itemId+role] = setTimeout(() => {
+        const btn = document.querySelector(`#comp-row-${itemId} .${role === 'architect' ? 'arch' : 'client'}-check`);
+        const newChecked = !currentlyChecked;
+        fetch('/projects/' + projectId + '/compliance/toggle/' + itemId, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+          body: JSON.stringify({ checked_by: role, checked: newChecked })
+        }).then(() => window.location.reload());
+      }, 300);
+    }
+  </script>
+</div>
+
+<!-- Tab: Meetings -->
+<div class="tab-panel" data-panel="meetings">
+  <div class="two-col">
+    <!-- Propose Meeting -->
+    <div class="card">
+        <div class="section-title">Schedule Meeting</div>
+        <form action="{{ url_for('meetings.propose', project_id=project.id) }}" method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="field">
+                <label>Option 1</label>
+                <input type="datetime-local" name="slot_1" required>
+            </div>
+            <div class="field">
+                <label>Option 2</label>
+                <input type="datetime-local" name="slot_2">
+            </div>
+            <div class="field">
+                <label>Option 3</label>
+                <input type="datetime-local" name="slot_3">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Propose Slots to Client</button>
+        </form>
+    </div>
+
+    <!-- Meeting History -->
+    <div class="card">
+        <div class="section-title">Upcoming & Past Meetings</div>
+        {% for m in project.meetings.order_by(Meeting.created_at.desc()) %}
+        <div class="meeting-row" style="padding:12px; border:1px solid var(--line); border-radius:8px; margin-bottom:12px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span class="badge {% if m.status == 'confirmed' %}badge-teal{% else %}badge-gold{% endif %}">
+                    {{ m.status|replace('_',' ')|title }}
+                </span>
+                <span style="font-size:11px; opacity:0.6;">{{ m.created_at|strftime('%d %b') }}</span>
+            </div>
+            <div style="margin-top:8px; font-weight:600;">
+                {% if m.status == 'confirmed' %}
+                {{ m.confirmed_slot|strftime('%d %b, %H:%M') }}
+                {% else %}
+                Awaiting client selection
+                {% endif %}
+            </div>
+            {% if m.status == 'confirmed' %}
+            <button class="btn btn-ghost" style="margin-top:12px; font-size:11px; width:100%;" 
+                    onclick='openMomModal({{ m.id }}, {{ (m.mom_discussion or "")|tojson }}, {{ (m.mom_decision or "")|tojson }})'>
+                Log Minutes (MOM)
+            </button>
+            {% endif %}
+        </div>
+        {% else %}
+        <p style="text-align:center; color:var(--chalk-3); padding:20px;">No meetings scheduled.</p>
+        {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Tab: Payments -->
+<!-- BACKEND NOTE: Payment model needs `logged_by_role` field (varchar, default 'architect').
+     Range-slider budget uses existing /projects/<id>/payments/budget POST endpoint.
+     New add-payment endpoint handles both architect and client roles. -->
+<div class="tab-panel" data-panel="payments">
+<style>
+  /* Financial page specific styles */
+  .fin-layout { display:grid; grid-template-columns:40% 60%; gap:20px; height:calc(100vh - 210px); }
+  @media(max-width:1024px) { .fin-layout { grid-template-columns:1fr; height:auto; } }
+  .fin-left { display:flex; flex-direction:column; gap:16px; overflow:hidden; }
+  .fin-right { display:flex; flex-direction:column; gap:16px; overflow:hidden; }
+  .fin-card { background:#1A1A1A; border:1px solid #2A2A2A; border-radius:10px; padding:20px; }
+
+  /* Dual-range slider */
+  .drange-wrap { position:relative; height:32px; margin:24px 0 32px; }
+  .drange-track { position:absolute; top:50%; transform:translateY(-50%); left:0; right:0; height:4px; background:#2A2A2A; border-radius:2px; pointer-events:none; }
+  .drange-fill { position:absolute; top:0; height:100%; background:#F5C842; border-radius:2px; pointer-events:none; }
+  .drange-wrap input[type=range] { position:absolute; top:50%; transform:translateY(-50%); width:100%; margin:0; appearance:none; -webkit-appearance:none; background:transparent; pointer-events:none; }
+  .drange-wrap input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#F5C842; border:3px solid #0D0D0D; box-shadow:0 0 0 2px #F5C842; pointer-events:all; cursor:pointer; transition:box-shadow 0.2s; }
+  .drange-wrap input[type=range]::-webkit-slider-thumb:hover { box-shadow:0 0 0 4px rgba(245,200,66,0.25); }
+  .drange-wrap input[type=range]::-webkit-slider-runnable-track { background:transparent; height:4px; }
+  .drange-labels { display:flex; justify-content:space-between; margin-top:8px; }
+  .drange-lbl { font-size:11px; color:#F5C842; font-weight:600; }
+
+  /* SVG Donut */
+  .donut-wrap { position:relative; width:180px; height:180px; margin:0 auto; flex-shrink:0; }
+  .donut-svg { transform:rotate(-90deg); }
+  .donut-bg { stroke:#2A2A2A; fill:none; }
+  .donut-arc { fill:none; stroke-linecap:round; stroke-dasharray:0 1000; transition:stroke-dasharray 1.2s ease-out; }
+  .donut-center { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; pointer-events:none; }
+  .stat-pills { display:flex; gap:10px; margin-top:16px; }
+  .stat-pill { flex:1; background:#1A1A1A; border:1px solid #2A2A2A; border-radius:8px; padding:10px 14px; text-align:center; }
+  .stat-pill-lbl { font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; }
+  .stat-pill-val { font-size:15px; font-weight:600; color:#F5C842; }
+  .stat-pill-val.negative { color:#E05252; }
+
+  /* Payment log filter */
+  .seg-control { display:inline-flex; background:#0D0D0D; border:1px solid #2A2A2A; border-radius:6px; padding:3px; gap:2px; margin-bottom:12px; }
+  .seg-btn { padding:5px 14px; border:none; border-radius:4px; font-size:12px; cursor:pointer; background:transparent; color:#606060; transition:all 0.2s; }
+  .seg-btn.active { background:#F5C842; color:#0D0D0D; font-weight:600; }
+
+  /* Payment log scrollable */
+  .paylog-body { overflow-y:auto; max-height:calc(100vh - 460px); }
+  .paylog-body::-webkit-scrollbar { width:4px; } .paylog-body::-webkit-scrollbar-track { background:transparent; } .paylog-body::-webkit-scrollbar-thumb { background:#3A3A3A; border-radius:2px; } .paylog-body::-webkit-scrollbar-thumb:hover { background:#F5C842; }
+
+  /* Role badges */
+  .role-arch { border:1px solid #F5C842; color:#F5C842; font-size:10px; padding:2px 8px; border-radius:20px; }
+  .role-client { border:1px solid #fff; color:#fff; font-size:10px; padding:2px 8px; border-radius:20px; }
+
+  /* File input */
+  .file-label { display:flex; align-items:center; gap:8px; border:1px dashed #3A3A3A; border-radius:6px; padding:10px 14px; cursor:pointer; font-size:13px; color:#505050; transition:border-color 0.2s; }
+  .file-label:hover { border-color:#F5C842; color:#A0A0A0; }
+  .file-label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+</style>
+
+{% set total_paid = project.payments|sum(attribute='amount') %}
+{% set budget = project.total_budget or 0 %}
+{% set remaining = budget - total_paid %}
+{% set over_budget = total_paid > budget and budget > 0 %}
+{% set pct = (total_paid / budget * 100) | int if budget > 0 else 0 %}
+
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-shrink:0;">
+  <div>
+    <div style="font-size:20px; color:#fff; font-weight:500;">Financial Overview</div>
+    <div style="font-size:13px; color:#606060;">Budget tracking for {{ project.name }}</div>
+  </div>
+  <div style="background:#2A2010; border:1px solid #F5C842; color:#F5C842; font-size:13px; font-weight:600; padding:6px 16px; border-radius:6px;">
+    Budget: ₹{{ "{:,}".format(budget|int) }}
+  </div>
+</div>
+
+<div class="fin-layout">
+  <!-- LEFT COLUMN: slider + chart + pills -->
+  <div class="fin-left">
+    <!-- Budget Range Slider -->
+    <div class="fin-card">
+      <div style="font-size:11px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:12px;">Set Budget Range</div>
+      <div class="drange-wrap">
+        <div class="drange-track"><div class="drange-fill" id="drange-fill"></div></div>
+        <input type="range" id="drange-min" min="0" max="5000000" step="10000" value="{{ [budget * 0.8, 0]|max|int }}">
+        <input type="range" id="drange-max" min="0" max="5000000" step="10000" value="{{ budget|int or 5000000 }}">
+      </div>
+      <div class="drange-labels">
+        <span class="drange-lbl" id="drange-min-lbl">Min ₹0</span>
+        <span class="drange-lbl" id="drange-max-lbl">Max ₹50,00,000</span>
+      </div>
+      <div class="field" style="margin-top:16px; margin-bottom:0;">
+        <label style="font-size:11px; color:#606060; text-transform:uppercase; letter-spacing:0.06em;">Set Exact Budget (₹)</label>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <input type="number" id="exact-budget-input" value="{{ budget|int }}" style="flex:1; background:#0D0D0D; border:1px solid #2A2A2A; color:#fff; padding:10px 14px; font-size:13px; border-radius:6px; outline:none;" onfocus="this.style.borderColor='#F5C842'; this.style.boxShadow='0 0 0 3px rgba(245,200,66,0.12)'" onblur="this.style.borderColor='#2A2A2A'; this.style.boxShadow='none'">
+          <form id="budget-form" action="{{ url_for('payments.update_budget', project_id=project.id) }}" method="POST" style="display:contents;">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="total_budget" id="budget-hidden">
+            <button type="submit" id="confirm-budget-btn" style="background:#F5C842; color:#0D0D0D; border:none; padding:10px 20px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer; white-space:nowrap; transition:all 0.2s;" onmouseover="this.style.background='#E0B530'" onmouseout="this.style.background='#F5C842'" onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'" onclick="document.getElementById('budget-hidden').value=document.getElementById('exact-budget-input').value">Confirm Budget</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Donut Chart -->
+    <div class="fin-card" style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+      <div class="donut-wrap">
+        <svg class="donut-svg" width="180" height="180" viewBox="0 0 180 180">
+          <circle class="donut-bg" cx="90" cy="90" r="72" stroke-width="16"/>
+          <circle class="donut-arc" id="donut-arc" cx="90" cy="90" r="72" stroke-width="16"
+            stroke="{{ '#E05252' if over_budget else '#F5C842' }}"
+            data-pct="{{ [pct, 100]|min }}"
+            style="stroke-dasharray:0 452;"/>
+        </svg>
+        <div class="donut-center">
+          {% if over_budget %}
+          <div style="font-size:10px; color:#E05252; text-transform:uppercase; letter-spacing:0.06em;">OVER</div>
+          <div style="font-size:18px; font-weight:700; color:#E05252; line-height:1.1;">BUDGET</div>
+          {% else %}
+          <div style="font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em;">SPENT</div>
+          <div style="font-size:20px; font-weight:700; color:#F5C842; line-height:1.1;">₹{{ "{:,}".format(total_paid|int) }}</div>
+          {% endif %}
+        </div>
+      </div>
+      <!-- Stat pills -->
+      <div class="stat-pills" style="width:100%;">
+        <div class="stat-pill">
+          <div class="stat-pill-lbl">Total Paid</div>
+          <div class="stat-pill-val">₹{{ "{:,}".format(total_paid|int) }}</div>
+        </div>
+        <div class="stat-pill">
+          <div class="stat-pill-lbl">Remaining</div>
+          <div class="stat-pill-val {{ 'negative' if remaining < 0 else '' }}">₹{{ "{:,}".format(remaining|int) }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT COLUMN: log form + payment table -->
+  <div class="fin-right">
+    <!-- Log Payment Form -->
+    <div class="fin-card">
+      <div style="font-size:15px; color:#fff; font-weight:500; margin-bottom:14px;">Log New Payment</div>
+      <form action="{{ url_for('payments.add', project_id=project.id) }}" method="POST" enctype="multipart/form-data" style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field" style="margin:0;">
+          <label style="font-size:11px; color:#606060; text-transform:uppercase; letter-spacing:0.06em;">Amount (₹)</label>
+          <input type="number" name="amount" placeholder="0" required style="margin-top:6px; width:100%; box-sizing:border-box; background:#0D0D0D; border:1px solid #2A2A2A; color:#F5C842; padding:10px 14px; font-size:13px; border-radius:6px; font-weight:600;" onfocus="this.style.borderColor='#F5C842'; this.style.boxShadow='0 0 0 3px rgba(245,200,66,0.12)'" onblur="this.style.borderColor='#2A2A2A'; this.style.boxShadow='none'">
+        </div>
+        <div class="field" style="margin:0;">
+          <label style="font-size:11px; color:#606060; text-transform:uppercase; letter-spacing:0.06em;">Purpose / Milestone</label>
+          <input type="text" name="purpose" placeholder="e.g. Foundation" required style="margin-top:6px; width:100%; box-sizing:border-box; background:#0D0D0D; border:1px solid #2A2A2A; color:#fff; padding:10px 14px; font-size:13px; border-radius:6px;" onfocus="this.style.borderColor='#F5C842'; this.style.boxShadow='0 0 0 3px rgba(245,200,66,0.12)'" onblur="this.style.borderColor='#2A2A2A'; this.style.boxShadow='none'">
+        </div>
+        <div class="field" style="margin:0; grid-column:1/-1;">
+          <label style="font-size:11px; color:#606060; text-transform:uppercase; letter-spacing:0.06em;">Notes (Optional)</label>
+          <textarea name="notes" rows="2" placeholder="Additional notes..." style="margin-top:6px; width:100%; box-sizing:border-box; background:#0D0D0D; border:1px solid #2A2A2A; color:#fff; padding:10px 14px; font-size:13px; border-radius:6px; resize:none; font-family:inherit;" onfocus="this.style.borderColor='#F5C842'; this.style.boxShadow='0 0 0 3px rgba(245,200,66,0.12)'" onblur="this.style.borderColor='#2A2A2A'; this.style.boxShadow='none'"></textarea>
+        </div>
+        <div class="field" style="margin:0; grid-column:1/-1;">
+          <label style="font-size:11px; color:#606060; text-transform:uppercase; letter-spacing:0.06em;">Upload Bill / Receipt</label>
+          <div style="margin-top:6px;">
+            <label for="bill-file" class="file-label">
+              <svg viewBox="0 0 24 24" style="width:16px;height:16px;stroke:#606060;stroke-width:2;fill:none;flex-shrink:0"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66L9.64 17.23a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+              <span id="file-label-text">📎 Choose file · No file chosen</span>
+            </label>
+            <input type="file" name="bill" id="bill-file" accept=".pdf,image/*" style="display:none;" onchange="document.getElementById('file-label-text').textContent=this.files[0]?this.files[0].name:'📎 Choose file · No file chosen'">
+          </div>
+        </div>
+        <div style="grid-column:1/-1;">
+          <button type="submit" style="width:100%; background:#F5C842; color:#0D0D0D; border:none; padding:10px 20px; border-radius:6px; font-weight:600; font-size:13px; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='#E0B530'" onmouseout="this.style.background='#F5C842'" onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform='scale(1)'">Log Payment</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Payment Log -->
+    <div class="fin-card" style="flex:1; display:flex; flex-direction:column; padding-bottom:0; overflow:hidden;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-shrink:0;">
+        <div style="font-size:15px; color:#fff; font-weight:500;">Payment Log</div>
+        <div class="seg-control" id="pay-seg">
+          <button class="seg-btn active" onclick="filterPayLog('all', this)">All</button>
+          <button class="seg-btn" onclick="filterPayLog('architect', this)">Architect's</button>
+          <button class="seg-btn" onclick="filterPayLog('client', this)">Client's</button>
+        </div>
+      </div>
+      <!-- Table header always visible -->
+      <table style="width:100%; border-collapse:collapse; flex-shrink:0;">
+        <thead>
+          <tr>
+            <th style="font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; padding:8px 12px; text-align:left; border-bottom:1px solid #2A2A2A; white-space:nowrap;">Date</th>
+            <th style="font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; padding:8px 12px; text-align:left; border-bottom:1px solid #2A2A2A;">Description</th>
+            <th style="font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; padding:8px 12px; text-align:left; border-bottom:1px solid #2A2A2A;">Amount</th>
+            <th style="font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; padding:8px 12px; text-align:left; border-bottom:1px solid #2A2A2A;">Attachment</th>
+            <th style="font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; padding:8px 12px; text-align:left; border-bottom:1px solid #2A2A2A;">Role</th>
+            <th style="font-size:10px; color:#606060; text-transform:uppercase; letter-spacing:0.06em; padding:8px 12px; text-align:left; border-bottom:1px solid #2A2A2A;">Status</th>
+          </tr>
+        </thead>
+      </table>
+      <!-- Scrollable body -->
+      <div class="paylog-body">
+        <table style="width:100%; border-collapse:collapse;" id="pay-table">
+          <tbody>
+            {% for p in project.payments|sort(attribute='date', reverse=True) %}
+            <tr class="pay-row" data-role="{{ p.logged_by_role or 'architect' }}" style="border-bottom:1px solid #1E1E1E; transition:background 0.15s;" onmouseover="this.style.background='#1A1A1A'" onmouseout="this.style.background='transparent'">
+              <td style="padding:10px 12px; font-size:12px; color:#A0A0A0; white-space:nowrap;">{{ p.date|strftime('%d %b %Y') }}</td>
+              <td style="padding:10px 12px;">
+                <div style="font-size:13px; font-weight:500; color:#fff;">{{ p.purpose|replace('_',' ')|title }}</div>
+                {% if p.notes %}<div style="font-size:11px; color:#606060; margin-top:2px;">{{ p.notes }}</div>{% endif %}
+              </td>
+              <td style="padding:10px 12px; font-size:13px; font-weight:600; color:#F5C842; white-space:nowrap;">₹{{ "{:,}".format(p.amount|int) }}</td>
+              <td style="padding:10px 12px;">
+                {% if p.bill_filename %}
+                <a href="{{ url_for('payments.download_bill', filename=p.bill_filename) }}" target="_blank" style="color:#F5C842; font-size:12px; text-decoration:none; display:flex; align-items:center; gap:4px;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">
+                  <svg viewBox="0 0 24 24" style="width:12px;height:12px;stroke:currentColor;stroke-width:2;fill:none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                  View Bill
+                </a>
+                {% else %}
+                <span style="font-size:11px; color:#3A3A3A;">No bill</span>
+                {% endif %}
+              </td>
+              <td style="padding:10px 12px;">
+                {% if (p.logged_by_role if p.logged_by_role is defined else 'architect') == 'architect' %}
+                <span class="role-arch">Architect</span>
+                {% else %}
+                <span class="role-client">Client</span>
+                {% endif %}
+              </td>
+              <td style="padding:10px 12px;">
+                <span style="background:#1A3A2A; color:#4ADE80; font-size:10px; font-weight:500; padding:3px 10px; border-radius:20px;">Paid</span>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" style="padding:40px; text-align:center; color:#3A3A3A; font-size:13px;">No payments logged yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+(function() {
+  // Dual-range slider logic
+  const minInput = document.getElementById('drange-min');
+  const maxInput = document.getElementById('drange-max');
+  const fill = document.getElementById('drange-fill');
+  const minLbl = document.getElementById('drange-min-lbl');
+  const maxLbl = document.getElementById('drange-max-lbl');
+  const exactInput = document.getElementById('exact-budget-input');
+  const MAX = 5000000;
+
+  function fmtIN(v) { return Number(v).toLocaleString('en-IN', {maximumFractionDigits:0}); }
+  function updateSlider() {
+    let minV = parseInt(minInput.value), maxV = parseInt(maxInput.value);
+    if (minV > maxV) { maxV = minV; maxInput.value = minV; }
+    const minPct = minV / MAX * 100;
+    const maxPct = maxV / MAX * 100;
+    fill.style.left = minPct + '%';
+    fill.style.width = (maxPct - minPct) + '%';
+    minLbl.textContent = 'Min ₹' + fmtIN(minV);
+    maxLbl.textContent = 'Max ₹' + fmtIN(maxV);
+    const mid = Math.round((minV + maxV) / 2 / 10000) * 10000;
+    exactInput.value = Math.min(Math.max(parseInt(exactInput.value) || mid, minV), maxV);
+    // z-index swap based on proximity
+    if ((maxV - minV) < 10000) { minInput.style.zIndex = 5; maxInput.style.zIndex = 4; }
+    else { minInput.style.zIndex = 3; maxInput.style.zIndex = 3; }
+  }
+  if (minInput) {
+    minInput.addEventListener('input', updateSlider);
+    maxInput.addEventListener('input', updateSlider);
+    exactInput.addEventListener('input', function() {
+      const v = parseInt(this.value) || 0;
+      const clamp = Math.min(Math.max(v, parseInt(minInput.value)), parseInt(maxInput.value));
+      if (v !== clamp) this.value = clamp;
+    });
+    updateSlider();
+  }
+
+  // Animate SVG donut
+  const arc = document.getElementById('donut-arc');
+  if (arc) {
+    const pct = parseFloat(arc.dataset.pct) || 0;
+    const circumference = 2 * Math.PI * 72; // r=72
+    const dash = circumference * pct / 100;
+    setTimeout(() => { arc.style.strokeDasharray = dash + ' ' + circumference; }, 100);
+  }
+
+  // Payment log filter
+  window.filterPayLog = function(role, btn) {
+    document.querySelectorAll('#pay-seg .seg-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('#pay-table .pay-row').forEach(row => {
+      row.style.display = (role === 'all' || row.dataset.role === role) ? '' : 'none';
+    });
+  };
+})();
+</script>
+
+<!-- Tab: Activity -->
+<div class="tab-panel" data-panel="activity">
+    <div class="card" style="padding:0;">
+        <div class="section-title" style="padding:24px 24px 0 24px;">Project Activity</div>
+        <table class="data-table" style="margin-top:16px;">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Actor</th>
+                    <th>Action</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in project.audit_logs.order_by(AuditLog.created_at.desc()) %}
+                <tr>
+                    <td style="font-size:12px;">{{ log.created_at|timeago }}</td>
+                    <td>{{ log.actor.name }}</td>
+                    <td><span class="badge badge-muted">{{ log.action }}</span></td>
+                    <td>{{ log.description }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" style="text-align:center; padding:40px; color:var(--chalk-3);">No activity logged.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<!-- MOM MODAL -->
+<div class="modal-backdrop" id="modal-mom">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-eyebrow">Minutes of Meeting</div>
+      <div class="modal-title">Log Discussion</div>
+    </div>
+    <form id="mom-form" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field">
+        <label>Discussion Points</label>
+        <textarea name="mom_discussion" id="mom-disc" rows="5" placeholder="What was talked about?"></textarea>
+      </div>
+      <div class="field">
+        <label>Decisions / Outcomes</label>
+        <textarea name="mom_decision" id="mom-dec" rows="3" placeholder="What was decided?"></textarea>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-mom')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save MOM</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+    function openMomModal(meetingId, discussion, decision) {
+        const form = document.getElementById('mom-form');
+        form.action = '/meetings/' + meetingId + '/notes';
+        document.getElementById('mom-disc').value = discussion;
+        document.getElementById('mom-dec').value = decision;
+        document.getElementById('modal-mom').classList.add('open');
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const tabs = document.querySelectorAll('.tab-btn');
+        const panels = document.querySelectorAll('.tab-panel');
+        
+        function switchTab(tabId) {
+            tabs.forEach(t => t.classList.remove('active'));
+            panels.forEach(p => p.classList.remove('active'));
+            
+            const targetTab = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+            const targetPanel = document.querySelector(`.tab-panel[data-panel="${tabId}"]`);
+            
+            if(targetTab) targetTab.classList.add('active');
+            if(targetPanel) targetPanel.classList.add('active');
+            window.history.replaceState(null, null, `#${tabId}`);
+        }
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+        });
+
+        // Check hash on load
+        const hash = window.location.hash.replace('#', '');
+        if(hash && [...tabs].some(t => t.dataset.tab === hash)) {
+            switchTab(hash);
+        }
+    });
+</script>
+{% endblock %}

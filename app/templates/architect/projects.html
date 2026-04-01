@@ -1,0 +1,94 @@
+{% extends "base_architect.html" %}
+{% block title %}Projects — BuildSmart{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="page-head-row">
+    <div>
+      <div class="page-eyebrow">Workspace</div>
+      <h1 class="page-title">Projects</h1>
+    </div>
+    <div class="gap-12">
+        <button class="btn btn-ghost" id="toggle-view">Card View</button>
+    </div>
+  </div>
+</div>
+
+<div id="projects-card-view">
+    <div class="three-col">
+      {% for p in projects %}
+      <div class="project-card">
+        <div class="project-card-name">{{ p.name }}</div>
+        <div class="project-card-meta">
+          <span class="badge {% if p.status == 'Approved' %}badge-teal{% elif p.status == 'Design' %}badge-gold{% else %}badge-sky{% endif %}">
+            {{ p.status }}
+          </span>
+          <span>{{ p.client.name if p.client else 'No client' }}</span>
+        </div>
+        <div class="card-foot" style="display:flex; justify-content:space-between; align-items:center; margin-top:16px;">
+          <span style="font-size:11px; color:var(--chalk-3);">Updated {{ p.updated_at|timeago }}</span>
+          <a href="{{ url_for('projects.workspace', project_id=p.id) }}" class="btn btn-ghost" style="padding:6px 12px; font-size:12px;">Open</a>
+        </div>
+      </div>
+      {% else %}
+      <div style="text-align:center; padding:40px; color:var(--chalk-3); grid-column:1/-1;">No projects found. Create a new project to get started.</div>
+      {% endfor %}
+    </div>
+</div>
+
+<div id="projects-table-view" style="display:none;">
+    <div class="card" style="padding:0;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Client</th>
+                    <th>Zone</th>
+                    <th>Last Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in projects %}
+                <tr>
+                    <td><strong>{{ p.name }}</strong></td>
+                    <td><span class="badge {% if p.status == 'Approved' %}badge-teal{% elif p.status == 'Design' %}badge-gold{% else %}badge-sky{% endif %}">{{ p.status }}</span></td>
+                    <td>{{ p.client.name if p.client else '--' }}</td>
+                    <td>{{ p.plot_zone }}</td>
+                    <td>{{ p.updated_at|timeago }}</td>
+                    <td>
+                        <a href="{{ url_for('projects.workspace', project_id=p.id) }}" style="color:var(--gold); text-decoration:none; font-weight:600;">Open</a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" style="text-align:center; padding:40px; color:var(--chalk-3);">No projects found. Create a new project to get started.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const cardBtn = document.getElementById('toggle-view');
+    const cardView = document.getElementById('projects-card-view');
+    const tableView = document.getElementById('projects-table-view');
+    
+    cardBtn.addEventListener('click', () => {
+        if (cardView.style.display === 'none') {
+            cardView.style.display = 'block';
+            tableView.style.display = 'none';
+            cardBtn.textContent = 'Table View';
+        } else {
+            cardView.style.display = 'none';
+            tableView.style.display = 'block';
+            cardBtn.textContent = 'Card View';
+        }
+    });
+</script>
+{% endblock %}

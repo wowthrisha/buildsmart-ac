@@ -1,0 +1,138 @@
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager
+from flask_wtf.csrf import CSRFProtect
+from config import Config
+from datetime import datetime, timezone
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+db     = SQLAlchemy()
+login  = LoginManager()
+csrf   = CSRFProtect()
+limiter = Limiter(key_func=get_remote_address, default_limits=[], storage_uri="memory://", strategy="fixed-window")
+
+# Helper function for notifications
+def _notify(user_id, title, body):
+    from app.models import Notification
+    n = Notification(user_id=user_id, title=title, body=body)
+    db.session.add(n)
+    db.session.commit()
+    
+    # Real-time trigger
+    try:
+        from app.routes.notifications import send_live_notif
+        send_live_notif(user_id, title, body)
+    except: pass
+
+def create_app():
+    app = Flask(__name__, instance_relative_config=True)
+    app.config.from_object(Config)
+
+    db.init_app(app)
+    login.init_app(app)
+    csrf.init_app(app)
+    limiter.init_app(app)
+
+    # Security: Enforce production-grade cookie settings
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    if app.config.get('FLASK_ENV') == 'production':
+        app.config['SESSION_COOKIE_SECURE'] = True
+
+    login.login_view     = 'auth.login'
+    login.login_message  = 'Please log in to access this page.'
+
+    @login.user_loader
+    def load_user(user_id):
+        from app.models import User
+        return User.query.get(int(user_id))
+
+    # Jinja2 filters
+    @app.template_filter('timeago')
+    def timeago_filter(dt):
+        if dt is None: return ''
+        now  = datetime.utcnow()
+        diff = now - dt
+        s    = int(diff.total_seconds())
+        if s < 60:   return f'{s}s ago'
+        if s < 3600: return f'{s//60}m ago'
+        if s < 86400:return f'{s//3600}h ago'
+        return dt.strftime('%d %b %Y')
+
+    @app.template_filter('inr')
+    def inr_filter(val):
+        return f'₹{val:,.0f}' if val else '₹0'
+
+    # Context processor — inject into all templates
+    # Global filters
+    import json
+    @app.template_filter('fromjson')
+    def fromjson_filter(s):
+        return json.loads(s) if s else {}
+
+    @app.template_filter('strftime')
+    def strftime_filter(value, format='%d %b %Y'):
+        if value is None: return ""
+        return value.strftime(format)
+
+    @app.context_processor
+    def inject_globals():
+        from flask_login import current_user
+        from app.models import Project, Notification, User, AuditLog
+        data = {'all_projects': [], 'pending_count': 0, 'notifications': [],
+                'unread_notifs': 0, 'all_clients': [], 'active_project': None}
+        if current_user.is_authenticated:
+            # Notifications for everyone
+            notifs = Notification.query.filter_by(
+                user_id=current_user.id).order_by(Notification.created_at.desc()).limit(10).all()
+            data['notifications'] = notifs
+            data['unread_notifs'] = sum(1 for n in notifs if not n.read)
+
+            if current_user.role == 'architect':
+                data['all_projects'] = Project.query.filter_by(
+                    architect_id=current_user.id).order_by(Project.updated_at.desc()).all()
+                data['all_clients'] = User.query.filter_by(role='client').all() # All clients for project creation
+            elif current_user.role == 'client':
+                from app.routes.client import get_client_project
+                data['projects'] = Project.query.filter_by(client_id=current_user.id).all()
+                data['project'] = get_client_project()
+                
+        data['AuditLog'] = AuditLog
+        data['Notification'] = Notification
+        return data
+
+    # Register blueprints
+    from app.auth     import bp as auth_bp
+    from app.routes.projects   import bp as proj_bp
+    from app.routes.plot       import bp as plot_bp
+    from app.routes.documents  import bp as docs_bp
+    from app.routes.compliance import bp as comp_bp
+    from app.routes.meetings   import bp as meet_bp
+    from app.routes.payments   import bp as pay_bp
+    from app.routes.activity   import bp as act_bp
+    from app.routes.client     import bp as client_bp
+    from app.routes.settings   import bp as settings_api
+    from app.routes.notifications import bp as notif_api
+
+    for bp in [auth_bp, proj_bp, plot_bp, docs_bp, comp_bp, meet_bp, pay_bp, act_bp, client_bp, settings_api, notif_api]:
+        app.register_blueprint(bp)
+
+    # P2-15: Custom error pages
+    from flask import render_template as _rt
+    @app.errorhandler(404)
+    def not_found(e):
+        return _rt('errors/404.html'), 404
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return _rt('errors/403.html'), 403
+
+    @app.errorhandler(500)
+    def server_error(e):
+        return _rt('errors/500.html'), 500
+
+    with app.app_context():
+        db.create_all()
+
+    return app

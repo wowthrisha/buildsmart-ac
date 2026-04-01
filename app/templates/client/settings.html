@@ -1,0 +1,32 @@
+{% extends "base_client.html" %}
+{% block title %}Settings — BuildSmart{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1 class="page-title">Settings</h1>
+    <p class="page-subtitle">Manage your account and notifications.</p>
+</div>
+
+<div class="card" style="max-width:600px;">
+    <form action="{{ url_for('settings.index') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="section-title">Account Details</div>
+        <div class="field">
+            <label>Name</label>
+            <input type="text" name="name" value="{{ current_user.name }}" required>
+        </div>
+        <div class="field">
+            <label>Phone</label>
+            <input type="text" name="phone" value="{{ current_user.phone or '' }}">
+        </div>
+
+        <div class="section-title" style="margin-top:40px;">Preferences</div>
+        <div class="field" style="display:flex; align-items:center; gap:12px;">
+            <input type="checkbox" name="email" id="chk-email" {% if current_user.reminders_email %}checked{% endif %}>
+            <label for="chk-email" style="margin:0;">Email Updates</label>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top:32px; width:100%;">Save Settings</button>
+    </form>
+</div>
+{% endblock %}

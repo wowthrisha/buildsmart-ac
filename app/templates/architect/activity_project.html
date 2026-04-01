@@ -1,0 +1,53 @@
+{% extends 'base_architect.html' %}
+{% block title %}Activity — {{ project.name }} — BuildSmart{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="page-head-row">
+    <div>
+      <div class="page-eyebrow">Project Activity</div>
+      <h1 class="page-title">{{ project.name }}</h1>
+      <p class="page-subtitle">Full audit trail for this project.</p>
+    </div>
+    <a href="{{ url_for('projects.workspace', project_id=project.id) }}#activity"
+       class="btn btn-ghost">← Back to Workspace</a>
+  </div>
+</div>
+
+<div class="card" style="padding:0; overflow:hidden;">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Date / Time</th>
+        <th>Action</th>
+        <th>Description</th>
+        <th>Actor</th>
+        <th>Client Visible</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for entry in logs %}
+      <tr>
+        <td style="white-space:nowrap;">{{ entry.created_at|strftime('%d %b %Y, %H:%M') }}</td>
+        <td><span class="badge badge-sky">{{ entry.action }}</span></td>
+        <td>{{ entry.description }}</td>
+        <td>{{ entry.actor.name if entry.actor else '—' }}</td>
+        <td>
+          {% if entry.is_client_visible %}
+            <span class="badge badge-teal">Yes</span>
+          {% else %}
+            <span class="badge badge-muted">No</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5" style="text-align:center; padding:60px; color:var(--chalk-3);">
+          No activity recorded yet.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
